@@ -126,7 +126,7 @@ inline void Capture::initializeColorImage()
 	ERROR_CHECK(colorFrameDescription->get_Height(&colorHeight)); // 1080
 	ERROR_CHECK(colorFrameDescription->get_BytesPerPixel(&colorBytesPerPixel)); // 4
 
-																				// Allocation Color Buffer
+	// Allocation of Color Buffer
 	colorBuffer.resize(colorWidth * colorHeight * colorBytesPerPixel);
 }
 
@@ -135,10 +135,6 @@ void Capture::update()
 {
 	// Update Color
 	updateColor();
-
-	// Calibrate next image sample
-	calibrate();
-
 }
 
 // Update Color
@@ -155,7 +151,29 @@ inline void Capture::updateColor()
 	ERROR_CHECK(colorFrame->CopyConvertedFrameDataToArray(static_cast<UINT>(colorBuffer.size()), &colorBuffer[0], ColorImageFormat::ColorImageFormat_Bgra));
 }
 
-inline void Capture::calibrate() {
+inline void Capture::calibrate(Mat image) {
+
+	if ((clock() - startClockTick) / (double)CLOCKS_PER_SEC < timeDelayBeforeCalibration) {
+		return;
+	}
+	// Convert to Grayscale
+
+	vector<Point2f> pointBuf;
+	int chessBoardFlags = CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE;
+	Mat gray;
+	cv::cvtColor(image, gray, CV_BGR2GRAY);
+
+	vector< Point2f > corners;
+	bool found = false;
+
+	found = cv::findChessboardCorners(image, boardSize, corners,
+		CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FILTER_QUADS);
+	if (found)
+	{
+		cornerSubPix(gray, corners, cv::Size(5, 5), cv::Size(-1, -1),
+			TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 30, 0.1));
+		drawChessboardCorners(gray, boardSize, corners, found);
+	}
 
 }
 
@@ -173,7 +191,6 @@ inline void Capture::drawColor()
 {
 	// Convert Coordinate Buffer to cv::Mat
 	//Mapping color and depth frame taken from https://gist.github.com/UnaNancyOwen/7e2c685752e16f8e42cc#file-main-cpp-L232
-	//colorMat = cv::Mat(depthHeight, depthWidth, CV_8UC4, &buffer[0]).clone();
 	colorMat = Mat(colorHeight, colorWidth, CV_8UC4, &colorBuffer[0]).clone();
 	cv::flip(colorMat, colorMat, 1);
 }
@@ -192,7 +209,8 @@ inline void Capture::showColor()
 	if (colorMat.empty()) {
 		return;
 	}
-
+	// Calibrate next image sample
+	calibrate(colorMat);
 	cv::imshow("Color", colorMat);
 }
 
@@ -224,7 +242,8 @@ void Capture::setupCalibration() {
 	numOfCornersHorizontal = 9;
 	numOfCornersVertical = 6;
 	numOfCalibrationLoop = 30;
-	Size board_size = Size(numOfCornersHorizontal, numOfCornersVertical);
+	boardSize = Size(numOfCornersHorizontal, numOfCornersVertical);
 	int board_n = numOfCornersHorizontal * numOfCornersVertical;
-
+	timeDelayBeforeCalibration = 2;
+	startClockTick = clock();
 }

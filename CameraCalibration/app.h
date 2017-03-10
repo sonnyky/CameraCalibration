@@ -49,10 +49,12 @@ private :
 	int numOfCornersHorizontal; // It is 9 by default
 	int numOfCornersVertical; // It is 6 by default
 	int numOfBoardImages;
+	Size boardSize;
+	float squareSize; // Actual length of one square edge in the chessboard pattern. In this example it is 2.6cm
 	int numOfCalibrationLoop; // It is 30 by default;
 	vector< vector< Point3f > > cornerPointsInrealWorld;
 	vector< vector< Point2f > > cornerPointsOnImage;
-	std::clock_t start;
+	std::clock_t startClockTick;
 	double timeDelayBeforeCalibration; // Default : 2 secs
 
 
@@ -72,7 +74,7 @@ private :
 	inline void initializeColorImage();
 	void update();
 	inline void updateColor();
-	inline void calibrate();
+	inline void calibrate(Mat image);
 	void draw();
 	inline void drawColor();
 	void show();
