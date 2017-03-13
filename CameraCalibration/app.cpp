@@ -31,6 +31,7 @@ Capture::~Capture()
 void Capture::initialize() {
 	
 	cvNamedWindow("Color", CV_WINDOW_NORMAL);
+	cvNamedWindow("Detected", CV_WINDOW_NORMAL);
 
 	initializeSensor();
 	initializeColorImage();
@@ -52,47 +53,12 @@ void Capture::run()
 		draw();
 		show();
         if(waitKey(30) >= 0) break;
+		if (numOfSuccessfulCornerDetections >= maxNumOfSuccessfulCornerDetections) break;
 	}
-}
 
-void Capture::filterColor(Mat image) 
-{
-	int largest_area = 0;
-	int largest_contour_index = 0;
-
-	cv::Scalar   min(90, 190, 80);
-	cv::Scalar   max(170, 255, 255);
-	cv::Mat mask, mask1, mask2, mask_grey;
-	cv::Mat hsv_image;
-	cv::cvtColor(image, hsv_image, cv::COLOR_BGR2HSV);
-	mask1 = image.clone(); mask2 = image.clone();
-	//filter the image in BGR color space
-	cv::inRange(hsv_image, min, max, mask);
-	//cv::inRange(hsv_image, cv::Scalar(55, 100, 50), cv::Scalar(65, 255, 255), mask1);
-	//cv::inRange(hsv_image, cv::Scalar(50, 100, 50), cv::Scalar(70, 255, 255), mask2);
-	std::vector<std::vector<cv::Point>> contours; // Vector for storing contour
-	std::vector<cv::Vec4i> hierarchy;
-	//mask = mask1 | mask2;
-	findContours(mask, contours, hierarchy, CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE); // Find the contours in the image
-	vector<Rect> bounding_rect(contours.size());
-
-	for (int i = 0; i< contours.size(); i++) // iterate through each contour. 
-	{
-		double a = contourArea(contours[i], false);  //  Find the area of contour
-	/*
-	if (a>largest_area) {
-	largest_area = a;
-	largest_contour_index = i;                //Store the index of largest contour
-	bounding_rect = boundingRect(contours[i]); // Find the bounding rectangle for biggest contour
+	if (cornerPointsInrealWorld.size() == cornerPointsOnImage.size()) {
+		calibrate();
 	}
-	*/
-
-		bounding_rect.push_back(boundingRect(contours[i]));
-
-	}
-	cv::Scalar color(255, 255, 255);
-	drawContours(mask, contours, largest_contour_index, color, CV_FILLED, 8, hierarchy); 
-	cv::imshow("filtered", mask);	
 }
 
 // Initialize Sensor
@@ -151,7 +117,7 @@ inline void Capture::updateColor()
 	ERROR_CHECK(colorFrame->CopyConvertedFrameDataToArray(static_cast<UINT>(colorBuffer.size()), &colorBuffer[0], ColorImageFormat::ColorImageFormat_Bgra));
 }
 
-inline void Capture::calibrate(Mat image) {
+inline void Capture::captureSampleImages(Mat image) {
 
 	if ((clock() - startClockTick) / (double)CLOCKS_PER_SEC < timeDelayBeforeCalibration) {
 		return;
@@ -173,6 +139,22 @@ inline void Capture::calibrate(Mat image) {
 		cornerSubPix(gray, corners, cv::Size(5, 5), cv::Size(-1, -1),
 			TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 30, 0.1));
 		drawChessboardCorners(gray, boardSize, corners, found);
+		imshow("Detected", gray);
+	}
+	else {
+		return;
+	}
+
+	vector< Point3f > obj;
+	for (int i = 0; i < numOfCornersVertical; i++)
+		for (int j = 0; j < numOfCornersHorizontal; j++)
+			obj.push_back(Point3f((float)j * squareSize, (float)i * squareSize, 0));
+
+	if (found) {
+
+		cornerPointsOnImage.push_back(corners);
+		cornerPointsInrealWorld.push_back(obj);
+		numOfSuccessfulCornerDetections++;
 	}
 
 }
@@ -210,7 +192,7 @@ inline void Capture::showColor()
 		return;
 	}
 	// Calibrate next image sample
-	calibrate(colorMat);
+	captureSampleImages(colorMat);
 	cv::imshow("Color", colorMat);
 }
 
@@ -242,8 +224,33 @@ void Capture::setupCalibration() {
 	numOfCornersHorizontal = 9;
 	numOfCornersVertical = 6;
 	numOfCalibrationLoop = 30;
+	squareSize = 2.6;
+	maxNumOfSuccessfulCornerDetections = 10;
+	numOfSuccessfulCornerDetections = 0;
 	boardSize = Size(numOfCornersHorizontal, numOfCornersVertical);
 	int board_n = numOfCornersHorizontal * numOfCornersVertical;
 	timeDelayBeforeCalibration = 2;
 	startClockTick = clock();
+}
+
+void Capture::calibrate() {
+	Mat K = Mat(3, 3, CV_32FC1);;
+	Mat D;
+	vector< Mat > rvecs, tvecs;
+	int flag = 0;
+	K.ptr<float>(0)[0] = 1; 
+	K.ptr<float>(1)[1] = 1; 
+	flag |= CV_CALIB_FIX_K4;
+	flag |= CV_CALIB_FIX_K5;
+	printf("Calibrating ...");
+	calibrateCamera(cornerPointsInrealWorld, cornerPointsOnImage, colorMat.size(), K, D, rvecs, tvecs, flag);
+	
+	FileStorage fs("camera_parameters.yml", FileStorage::WRITE);
+	fs << "K" << K;
+	fs << "D" << D;
+	fs << "board_width" << numOfCornersHorizontal;
+	fs << "board_height" << numOfCornersVertical;
+	fs << "square_size" << squareSize;
+	printf("Done Calibration\n");
+	
 }

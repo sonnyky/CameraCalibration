@@ -56,7 +56,8 @@ private :
 	vector< vector< Point2f > > cornerPointsOnImage;
 	std::clock_t startClockTick;
 	double timeDelayBeforeCalibration; // Default : 2 secs
-
+	int numOfSuccessfulCornerDetections;
+	int maxNumOfSuccessfulCornerDetections; // Default : 10 images
 
 public:
 	// Constructor
@@ -74,13 +75,13 @@ private :
 	inline void initializeColorImage();
 	void update();
 	inline void updateColor();
-	inline void calibrate(Mat image);
+	inline void captureSampleImages(Mat image);
+	inline void calibrate();
 	void draw();
 	inline void drawColor();
 	void show();
 	inline void showColor();
 
-	void filterColor(Mat image);
 	static void mouseCallback(int event, int x, int y, int flags, void* userdata);
 	inline void doMouseCallback(int event, int x, int y, int flags);
 
