@@ -4,9 +4,7 @@
 #include <chrono>
 
 #include <numeric>
-// oscpack
-#include <ip/UdpSocket.h>
-#include <osc/OscOutboundPacketStream.h>
+
 #include <opencv2/features2d/features2d.hpp>
 #include <opencv2/features2d.hpp>
 #include <opencv2/xfeatures2d.hpp>
@@ -38,7 +36,6 @@ void Capture::initialize() {
 	cv::setMouseCallback("Color", mouseCallback, this);
 
 	setupCalibration();
-	//imwrite("../ReferenceImages/arucoMarker849.jpg", markerImage);
 	
 }
 
@@ -52,11 +49,17 @@ void Capture::run()
 		update();
 		draw();
 		show();
-        if(waitKey(30) >= 0) break;
+		if(waitKey(1) == 113) break;
+
+		if (waitKey(1) == 99) {
+			// Calibrate next image sample
+			captureSampleImages(colorMat);
+		}
+
 		if (numOfSuccessfulCornerDetections >= maxNumOfSuccessfulCornerDetections) break;
 	}
 
-	if (cornerPointsInrealWorld.size() == cornerPointsOnImage.size()) {
+	if (cornerPointsInrealWorld.size() == cornerPointsOnImage.size() && cornerPointsOnImage.size() > 0) {
 		calibrate();
 	}
 }
@@ -122,18 +125,19 @@ inline void Capture::captureSampleImages(Mat image) {
 	if ((clock() - startClockTick) / (double)CLOCKS_PER_SEC < timeDelayBeforeCalibration) {
 		return;
 	}
+	printf("Capturing sample images\n");
 	// Convert to Grayscale
-
+	
 	vector<Point2f> pointBuf;
 	int chessBoardFlags = CALIB_CB_ADAPTIVE_THRESH | CALIB_CB_NORMALIZE_IMAGE;
 	Mat gray;
 	cv::cvtColor(image, gray, CV_BGR2GRAY);
-
+	imshow("Detected", gray);
 	vector< Point2f > corners;
 	bool found = false;
-
-	found = cv::findChessboardCorners(image, boardSize, corners,
-		CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_FILTER_QUADS);
+	
+	found = findChessboardCorners(image, boardSize, corners, chessBoardFlags);
+	
 	if (found)
 	{
 		cornerSubPix(gray, corners, cv::Size(5, 5), cv::Size(-1, -1),
@@ -144,19 +148,18 @@ inline void Capture::captureSampleImages(Mat image) {
 	else {
 		return;
 	}
-
+	
 	vector< Point3f > obj;
 	for (int i = 0; i < numOfCornersVertical; i++)
 		for (int j = 0; j < numOfCornersHorizontal; j++)
 			obj.push_back(Point3f((float)j * squareSize, (float)i * squareSize, 0));
 
 	if (found) {
-
 		cornerPointsOnImage.push_back(corners);
 		cornerPointsInrealWorld.push_back(obj);
 		numOfSuccessfulCornerDetections++;
 	}
-
+	
 }
 
 // Draw Data
@@ -191,8 +194,7 @@ inline void Capture::showColor()
 	if (colorMat.empty()) {
 		return;
 	}
-	// Calibrate next image sample
-	captureSampleImages(colorMat);
+	
 	cv::imshow("Color", colorMat);
 }
 
